@@ -35,17 +35,12 @@ def SQL_INIT():
 
     con = mysql.connector.connect(user=login_cred.uname, password=login_cred.password, host="localhost")
     cur = con.cursor()
-    cur.execute("SHOW DATABASES")
-    databases = [x[0] for x in cur.fetchall()]
 
-    if DATABASE_NAME not in databases:
-        cur.execute(f"CREATE DATABASE {DATABASE_NAME}")
-        cur.execute(f"USE {DATABASE_NAME}")
-        cur.execute(f"CREATE TABLE IF NOT EXISTS `{STUDENT_TABLE_NAME}` (Student_ID INT PRIMARY KEY, Name VARCHAR(30) NOT NULL, SLOT ENUM('MORNING', 'EVENING') NOT NULL)")
-        cur.execute(f"CREATE TABLE IF NOT EXISTS `{EXAM_TABLE_NAME}` (EXAM_ID INT PRIMARY KEY, Student_ID INT, FOREIGN KEY (Student_ID) REFERENCES `{STUDENT_TABLE_NAME}`(Student_ID), PHYSICS INT, CHEMISTRY INT, MATH INT, PYTHON INT, EXAM ENUM('CAT1', 'CAT2', 'FAT'))")
-        con.commit()
-    else:
-        cur.execute(f"USE {DATABASE_NAME}")
+    cur.execute(f"CREATE DATABASE IF NOT EXISTS {DATABASE_NAME}")
+    cur.execute(f"USE {DATABASE_NAME}")
+    cur.execute(f"CREATE TABLE IF NOT EXISTS `{STUDENT_TABLE_NAME}` (Student_ID INT PRIMARY KEY, Name VARCHAR(30) NOT NULL, SLOT ENUM('MORNING', 'EVENING') NOT NULL)")
+    cur.execute(f"CREATE TABLE IF NOT EXISTS `{EXAM_TABLE_NAME}` (EXAM_ID INT PRIMARY KEY, Student_ID INT, FOREIGN KEY (Student_ID) REFERENCES `{STUDENT_TABLE_NAME}`(Student_ID), PHYSICS INT, CHEMISTRY INT, MATH INT, PYTHON INT, EXAM ENUM('CAT1', 'CAT2', 'FAT'))")
+    con.commit()
 
 
 # ------------------- Input Screens -------------------
@@ -342,6 +337,91 @@ class ViewStudentsScreen(Screen):
         self.dismiss()
 
 
+class SearchStudentScreen(Screen):
+    CSS = """
+    SearchStudentScreen {
+        align: center middle;
+    }
+
+    #dialog {
+        width: 60;
+        height: auto;
+        border: thick $background 80%;
+        background: $surface;
+        padding: 1 2;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Static("Search Student", classes="centered")
+            yield Label("Search by ID or partial Name:")
+            yield Input(id="query", placeholder="Enter ID or name")
+            with Horizontal():
+                yield Button("Search", id="search", variant="primary")
+                yield Button("Cancel", id="cancel", variant="error")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "search":
+            q = self.query_one("#query", Input).value.strip()
+
+            try:
+                # If digits, treat as exact ID search
+                if q.isdigit():
+                    cur.execute(f"SELECT * FROM {STUDENT_TABLE_NAME} WHERE Student_ID=%s", (int(q),))
+                else:
+                    cur.execute(f"SELECT * FROM {STUDENT_TABLE_NAME} WHERE Name LIKE %s", (f"%{q}%",))
+
+                rows = cur.fetchall()
+                self.app.push_screen(SearchStudentResultScreen(rows))
+            except Exception as e:
+                self.app.notify(f"Error: {str(e)}", severity="error")
+        else:
+            self.app.pop_screen()
+
+
+class SearchStudentResultScreen(Screen):
+    CSS = """
+    SearchStudentResultScreen {
+        align: center middle;
+    }
+
+    #dialog {
+        width: 80%;
+        height: 80%;
+        border: thick $background 80%;
+        background: $surface;
+        padding: 1 2;
+    }
+
+    #content {
+        height: 1fr;
+        overflow-y: auto;
+        border: solid $primary;
+    }
+    """
+
+    def __init__(self, rows):
+        super().__init__()
+        self.rows = rows
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Static("Search Results", classes="centered")
+            with VerticalScroll(id="content"):
+                if not self.rows:
+                    yield Static("No matching students found.")
+                else:
+                    yield Static(f"{'ID':<20}{'Name':<20}{'Slot':<20}")
+                    yield Static("-" * 60)
+                    for s in self.rows:
+                        yield Static(f"{s[0]:<20}{s[1]:<20}{s[2]:<20}")
+            yield Button("Close", id="close")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.app.pop_screen()
+
+
 class ViewExamsScreen(Screen):
     BINDINGS = [("escape", "app.pop_screen", "Close")]
     
@@ -439,7 +519,8 @@ class MenuApp(App):
                 ListItem(Label("7. Delete Exam Record")),
                 ListItem(Label("8. Export Data to CSV")),
                 ListItem(Label("9. Import Data from CSV")),
-                ListItem(Label("10. Exit")),
+                ListItem(Label("10. Search Student")),
+                ListItem(Label("11. Exit")),
                 id="menu"
             )
         )
@@ -474,6 +555,8 @@ class MenuApp(App):
             except Exception as e:
                 self.notify(f"Error: {str(e)}", severity="error")
         elif index == 9:
+            self.push_screen(SearchStudentScreen())
+        elif index == 10:
             await self.action_quit()
 
 
