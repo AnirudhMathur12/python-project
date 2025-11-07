@@ -1,11 +1,5 @@
-from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, ListView, ListItem, Label, Input, Button
-from textual.containers import Container, Vertical, Horizontal, VerticalScroll
-from textual.screen import Screen
-from textual import events
-
-import mysql.connector
-import pandas
+import sys
+import subprocess
 import pickle
 import os
 
@@ -14,6 +8,45 @@ STUDENT_TABLE_NAME = "STUDENT_USEMP_TBL"
 EXAM_TABLE_NAME = "EXAMINATION_USEMP_TBL"
 FILENAME = "login-cred.usemp"
 
+DEPENDENCIES = [
+    ("textual", "textual"),
+    ("pandas", "pandas"),
+    ("mysql.connector", "mysql-connector-python")
+]
+
+def ensure_dependencies():
+    missing = []
+    for module, pip_name in DEPENDENCIES:
+        try:
+            __import__(module)
+        except ImportError:
+            missing.append(pip_name)
+
+    if not missing:
+        return
+
+    print("Missing dependencies detected:")
+    for pkg in missing:
+        print(" -", pkg)
+
+    resp = input("Install missing packages? (y/n): ").strip().lower()
+    if resp != "y":
+        raise SystemExit(1)
+
+    for pkg in missing:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", pkg])
+
+
+ensure_dependencies()
+
+from textual.app import App, ComposeResult
+from textual.widgets import Header, Footer, Static, ListView, ListItem, Label, Input, Button
+from textual.containers import Container, Vertical, Horizontal, VerticalScroll
+from textual.screen import Screen
+from textual import events
+
+import pandas
+import mysql.connector
 
 class login:
     def __init__(self, uname, password):
@@ -561,6 +594,7 @@ class MenuApp(App):
 
 
 def main():
+
     SQL_INIT()
     MenuApp().run()
     cur.close()
